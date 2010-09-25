@@ -1,6 +1,6 @@
 ; $Id: shoutcast.info,v 1.2.2.1 2010/08/22 23:04:42 yohnson Exp $
-name = shoutcast
-description = SHOUTcast Statistics Integration for Drupal.
+name = SHOUTcast
+description = SHOUTcast server statistics display.
 core = 6.x
 php = 5.0
 

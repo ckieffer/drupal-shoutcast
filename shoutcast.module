@@ -34,7 +34,6 @@ function shoutcast_perm() {
  * Generate the SHOUTcast admin settings form
  *
  * @return array   Module admin form
- * @todo Remove the unit_opts option, it's not used
  *
  * @todo Enable the listeners option
  * @todo Add date format to display with song history in block and page
@@ -141,15 +140,6 @@ function shoutcast_admin() {
           'currentlisteners', 'peaklisteners', 'averagetime')),
       '#options' => $block_options
   );
-
-//  $form['shoutcast_misc_options'] = array(
-//      '#type' => 'checkboxes',
-//      '#title' => t('Misc Options'),
-//      '#default_value' => variable_get('shoutcast_misc_options', array('unit_opts')),
-//      '#options' => array(
-//          'unit_opts' => t('Show unit options'),
-//      ),
-//  );
 
   return system_settings_form($form);
 }

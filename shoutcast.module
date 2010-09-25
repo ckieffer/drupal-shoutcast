@@ -81,7 +81,7 @@ function shoutcast_admin() {
       '#type' => 'radios',
       '#title' => t('Error Handling'),
       '#default_value' => variable_get('shoutcast_error_handling', 0),
-      '#options' => array(t('Do not display block'), t('Display block with error message')),
+      '#options' => array(t('Do not display table'), t('Display table with error message')),
       '#description' => t('When SHOUTcast XML feed is unavaible or invalid.'),
   );
 
@@ -238,8 +238,6 @@ function shoutcast_all() {
  * Get SHOUTcast server details from its XML stats page
  *
  * @return object  $xml      An XML object containing all stats
- *
- * @todo Append drupal_http_request->response->code to XML object returned
  */
 function shoutcast_get_xml() {
   // if the cache has expired or it doesn't exist, get stats from the server
@@ -252,7 +250,9 @@ function shoutcast_get_xml() {
     $useragent = 'Mozilla/5.001 (Drupal SHOUTcast Stats Module)';
     $headers = array('User-Agent' => $useragent, 'Authorization' => 'Basic ' . base64_encode($username . ':' . $password));
     $response = drupal_http_request("http://$host:$port/admin.cgi?mode=viewxml", $headers, 'GET');
-    $xml = $response->data;
+    $xml = simplexml_load_string($response->data);
+    // Append the request response code to the object
+    $xml->RESPONSECODE = $response->code;
 
     // get the caching interval (in minutes) from the module's settings
     $interval = variable_get('shoutcast_cachetime', 1);
@@ -262,10 +262,10 @@ function shoutcast_get_xml() {
 
   } else {
     // get cached data
-    $xml = $xml_cache->data;
+    $xml = simplexml_load_string($xml_cache->data);
   }
 
-  return simplexml_load_string($xml);
+  return $xml;
 }
 
 /**
@@ -275,131 +275,158 @@ function shoutcast_get_xml() {
  * @param  array   $options  SHOUTcast module settings, includes which fields to show
  * @return array   $row      List of table rows to display
  *
- * @todo Display response code
  * @todo Display listeners
  */
 function shoutcast_table_rows($xml, $options) {
   $rows = array();
+  $show_errors = variable_get('shoutcast_error_handling', 0);
 
-  // when using checkboxes we have to cast the variable as a string?
-  if ((string) $options['currentlisteners'] == 'currentlisteners') {
-    $rows[] = array(
-        array('data' => 'Current Listeners'),
-        array('data' => $xml->CURRENTLISTENERS)
-    );
+  // If the module's set to display errors and a response code other than 200 OK, show errors
+  if ($show_errors && ($xml->RESPONSECODE != 200)) {
+      $rows[] = array(
+          array('data' => 'Error'),
+          array('data' => 'SHOUTcast module has not been configured or the server is not responding')
+      );
+      // SHOUTcast server response codes (HTTP), 200 OK
+      switch ($xml->RESPONSECODE) {
+        case 203:
+          $response_code = '203 Partial Information';
+          break;
+        case 204:
+          $response_code = '204 No Response';
+          break;
+        case 401:
+          $response_code = '401 Unauthorized';
+          break;
+        case 403:
+          $response_code = '403 Forbidden';
+          break;
+        case 404:
+          $response_code = '404 Not found';
+          break;
+        case 500:
+          $response_code = '500 Internal Error';
+          break;
+        case 503:
+          $response_code = '503 Gateway timout';
+          break;
+        default:
+          $response_code = $xml->RESPONSECODE . ' Unknown error';
+          break;
+      }
+      $rows[] = array(
+          array('data' => 'Response'),
+          array('data' => $response_code)
+      );
+
+  } else {
+
+    if ((string) $options['currentlisteners'] == 'currentlisteners') {
+      $rows[] = array(
+          array('data' => 'Current Listeners'),
+          array('data' => $xml->CURRENTLISTENERS)
+      );
+    }
+    if ((string) $options['peaklisteners'] == 'peaklisteners') {
+      $rows[] = array(
+          array('data' => 'Most Listeners'),
+          array('data' => $xml->PEAKLISTENERS)
+      );
+    }
+    if ((string) $options['maxlisteners'] == 'maxlisteners') {
+      $rows[] = array(
+          array('data' => 'Listener Limit'),
+          array('data' => $xml->MAXLISTENERS)
+      );
+    }
+    if ((string) $options['reportedlisteners'] == 'reportedlisteners') {
+      $rows[] = array(
+          array('data' => 'Reported Listeners'),
+          array('data' => $xml->REPORTEDLISTENERS)
+      );
+    }
+    if ((string) $options['averagetime'] == 'averagetime') {
+      $avg = floor($xml->AVERAGETIME / 60);
+      $rows[] = array(
+          array('data' => 'Average Listen Time'),
+          array('data' => $avg . ' minutes')
+      );
+    }
+    if ((string) $options['servergenre'] == 'servergenre') {
+      $rows[] = array(
+          array('data' => 'Server Genre'),
+          array('data' => $xml->SERVERGENRE)
+      );
+    }
+    if ((string) $options['serverurl'] == 'serverurl') {
+      $rows[] = array(
+          array('data' => 'Server URL'),
+          array('data' => '<a href="' . $xml->SERVERURL . '">' . $xml->SERVERURL . '</a>')
+      );
+    }
+    if ((string) $options['servertitle'] == 'servertitle') {
+      $rows[] = array(
+          array('data' => 'Server Title'),
+          array('data' => $xml->SERVERTITLE)
+      );
+    }
+    if ((string) $options['songtitle'] == 'songtitle') {
+      $rows[] = array(
+          array('data' => 'Current Song'),
+          array('data' => $xml->SONGTITLE)
+      );
+    }
+    if ((string) $options['irc'] == 'irc') {
+      $rows[] = array(
+          array('data' => 'IRC'),
+          array('data' => $xml->IRC)
+      );
+    }
+    if ((string) $options['webhits'] == 'webhits') {
+      $rows[] = array(
+          array('data' => 'Web Hits'),
+          array('data' => $xml->WEBHITS)
+      );
+    }
+    if ((string) $options['streamhits'] == 'streamhits') {
+      $rows[] = array(
+          array('data' => 'Stream Hits'),
+          array('data' => $xml->STREAMHITS)
+      );
+    }
+    if ((string) $options['streamstatus'] == 'streamstatus') {
+      ($xml->STREAMSTATUS == '1') ? $sc_srv_status = 'Up' : $sc_srv_status = 'Down';
+      $rows[] = array(
+          array('data' => 'Stream Status'),
+          array('data' => $sc_srv_status)
+      );
+    }
+    if ((string) $options['bitrate'] == 'bitrate') {
+      $rows[] = array(
+          array('data' => 'Stream Bitrate'),
+          array('data' => $xml->BITRATE . ' kbps')
+      );
+    }
+    if ((string) $options['content'] == 'content') {
+      $rows[] = array(
+          array('data' => 'Content Type'),
+          array('data' => $xml->CONTENT)
+      );
+    }
+    if ((string) $options['version'] == 'version') {
+      $rows[] = array(
+          array('data' => 'Version'),
+          array('data' => $xml->VERSION)
+      );
+    }
+    if ((string) $options['songhistory'] == 'songhistory') {
+      $history = shoutcast_history_toarray($xml->SONGHISTORY);
+      $rows[] = array(
+          array('data' => 'Song History'),
+          array('data' => shoutcast_history_format($history))
+      );
+    }
   }
-  if ((string) $options['peaklisteners'] == 'peaklisteners') {
-    $rows[] = array(
-        array('data' => 'Most Listeners'),
-        array('data' => $xml->PEAKLISTENERS)
-    );
-  }
-  if ((string) $options['maxlisteners'] == 'maxlisteners') {
-    $rows[] = array(
-        array('data' => 'Listener Limit'),
-        array('data' => $xml->MAXLISTENERS)
-    );
-  }
-  if ((string) $options['reportedlisteners'] == 'reportedlisteners') {
-    $rows[] = array(
-        array('data' => 'Reported Listeners'),
-        array('data' => $xml->REPORTEDLISTENERS)
-    );
-  }
-  if ((string) $options['averagetime'] == 'averagetime') {
-    $avg = floor($xml->AVERAGETIME / 60);
-    $rows[] = array(
-        array('data' => 'Average Listen Time'),
-        array('data' => $avg . ' minutes')
-    );
-  }
-  if ((string) $options['servergenre'] == 'servergenre') {
-    $rows[] = array(
-        array('data' => 'Server Genre'),
-        array('data' => $xml->SERVERGENRE)
-    );
-  }
-  if ((string) $options['serverurl'] == 'serverurl') {
-    $rows[] = array(
-        array('data' => 'Server URL'),
-        array('data' => '<a href="' . $xml->SERVERURL . '">' . $xml->SERVERURL . '</a>')
-    );
-  }
-  if ((string) $options['servertitle'] == 'servertitle') {
-    $rows[] = array(
-        array('data' => 'Server Title'),
-        array('data' => $xml->SERVERTITLE)
-    );
-  }
-  if ((string) $options['songtitle'] == 'songtitle') {
-    $rows[] = array(
-        array('data' => 'Current Song'),
-        array('data' => $xml->SONGTITLE)
-    );
-  }
-  if ((string) $options['irc'] == 'irc') {
-    $rows[] = array(
-        array('data' => 'IRC'),
-        array('data' => $xml->IRC)
-    );
-  }
-  if ((string) $options['webhits'] == 'webhits') {
-    $rows[] = array(
-        array('data' => 'Web Hits'),
-        array('data' => $xml->WEBHITS)
-    );
-  }
-  if ((string) $options['streamhits'] == 'streamhits') {
-    $rows[] = array(
-        array('data' => 'Stream Hits'),
-        array('data' => $xml->STREAMHITS)
-    );
-  }
-  if ((string) $options['streamstatus'] == 'streamstatus') {
-    ($xml->STREAMSTATUS == '1') ? $sc_srv_status = 'Up' : $sc_srv_status = 'Down';
-    $rows[] = array(
-        array('data' => 'Stream Status'),
-        array('data' => $sc_srv_status)
-    );
-  }
-  if ((string) $options['bitrate'] == 'bitrate') {
-    $rows[] = array(
-        array('data' => 'Stream Bitrate'),
-        array('data' => $xml->BITRATE . ' kbps')
-    );
-  }
-  if ((string) $options['content'] == 'content') {
-    $rows[] = array(
-        array('data' => 'Content Type'),
-        array('data' => $xml->CONTENT)
-    );
-  }
-  if ((string) $options['version'] == 'version') {
-    $rows[] = array(
-        array('data' => 'Version'),
-        array('data' => $xml->VERSION)
-    );
-  }
-  if ((string) $options['songhistory'] == 'songhistory') {
-    $history = shoutcast_history_toarray($xml->SONGHISTORY);
-    $rows[] = array(
-        array('data' => 'Song History'),
-        array('data' => shoutcast_history_format($history))
-    );
-  }
-  // SHOUTcast server response codes (HTTP)
-  // 200 OK
-  // 203 Partial Information
-  // 204 No Response
-  // 401 Unauthorized
-  // 403 Forbidden
-  // 404 Not found
-  // 500 Internal Error
-  // 503 Gateway timout
-//  $rows[] = array(
-//      array('data' => 'Response Code'),
-//      array('data' => $response->code)
-//  );
 
   return $rows;
 }

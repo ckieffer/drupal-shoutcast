@@ -132,7 +132,8 @@ function shoutcast_admin() {
   );
 
   $block_options = array_merge(
-          array('details_link' => t('Show \'Details...\' link under block')),
+          array('details_link' => t('Show \'Details...\' link under block. Don\'t forget to set
+              access permissions.')),
           $shoutcast_stats
   );
 
@@ -459,9 +460,11 @@ function shoutcast_history_toarray($songhistory) {
  */
 function shoutcast_history_format($history) {
   $html = '';
+  $timezone = variable_get('date_default_timezone',
+          isset($_SESSION['timezone']) ? $_SESSION['timezone'] : 0);
   if (count($history)) {
     foreach ($history as $timestamp => $song) {
-      $date = format_date($timestamp, 'medium', '', 0);
+      $date = format_date($timestamp, 'medium', '', $timezone);
       $html .= "<p>$date - $song</p>";
     }
   }

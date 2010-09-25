@@ -1,0 +1,26 @@
+/* $Id: CHANGELOG.txt,v 1.3 2007/03/24 10:57:49 sanduhrs Exp $ */
+
+CHANGELOG
+---------
+
+shoutcast.module - September, 25th 2010
+--------------------------------------
+- Added display options for other SHOUTcast details.
+- Added display of song history
+- HTML markup fixes.
+- PHP code formatting cleanup.
+
+shoutcast.module - August, 22th 2010
+--------------------------------------
+- Drupal 6 compatibility update.
+
+shoutcast.module - March, 20th 2007
+--------------------------------------
+- Drupal 5 compatibility update.
+
+shoutcast.module - October, 17th 2006
+--------------------------------------
+- initial release.
+
+Comments and suggestions to
+Stefan Auditor <stefan.auditor@erdfisch.de>

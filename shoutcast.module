@@ -113,8 +113,11 @@ function shoutcast_admin() {
   $form['shoutcast_page_fields'] = array(
       '#type' => 'checkboxes',
       '#title' => t('Page Display Options'),
-      '#default_value' => variable_get('shoutcast_page_fields', array(
-          'currentlisteners', 'peaklisteners', 'averagetime')),
+      '#default_value' => variable_get('shoutcast_page_fields', array('currentlisteners',
+            'peaklisteners', 'maxlisteners', 'reportedlisteners', 'averagetime', 'servergenre',
+            'serverurl', 'servertitle', 'irc', 'webhits', 'streamhits', 'streamstatus', 'bitrate',
+            'content', 'version', 'songhistory'
+          )),
       '#options' => $shoutcast_stats
   );
 
@@ -136,8 +139,9 @@ function shoutcast_admin() {
   $form['shoutcast_block_options'] = array(
       '#type' => 'checkboxes',
       '#title' => t('Block Display Options'),
-      '#default_value' => variable_get('shoutcast_block_options', array(
-          'currentlisteners', 'peaklisteners', 'averagetime')),
+      '#default_value' => variable_get('shoutcast_block_options', array('details_link',
+            'currentlisteners', 'songtitle', 'streamstatus'
+          )),
       '#options' => $block_options
   );
 
@@ -188,8 +192,8 @@ function shoutcast_block($op = 'list', $delta = 0) {
   } elseif ($op == 'view') {
     // Get SHOUTcast XML data, either from the server or cache
     $xml = shoutcast_get_xml();
-    $options = variable_get('shoutcast_block_options', array('currentlisteners',
-        'songtitle', 'streamstatus'
+    $options = variable_get('shoutcast_block_options', array('details_link',
+          'currentlisteners', 'songtitle', 'streamstatus'
       ));
 
     // build the block's table

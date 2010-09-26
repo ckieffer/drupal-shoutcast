@@ -18,6 +18,7 @@ function shoutcast_help($path, $arg) {
       $output = '';
       break;
   }
+
   return $output;
 }
 
@@ -35,7 +36,6 @@ function shoutcast_perm() {
  *
  * @return array   Module admin form
  *
- * @todo Enable the listeners option
  * @todo Add date format to display with song history in block and page
  */
 function shoutcast_admin() {
@@ -106,8 +106,8 @@ function shoutcast_admin() {
           'content' => t('Content type'),
           'version' => t('Server version'),
           //'webdata' => t('Web data'), // object
-          //'listeners' => t('Listeners'), // object
-          'songhistory' => t('Song history'), // object
+          'songhistory' => t('Song history'),
+          'listeners' => t('Listeners'),
       );
 
   $form['shoutcast_page_fields'] = array(
@@ -116,7 +116,7 @@ function shoutcast_admin() {
       '#default_value' => variable_get('shoutcast_page_fields', array('currentlisteners',
             'peaklisteners', 'maxlisteners', 'reportedlisteners', 'averagetime', 'servergenre',
             'serverurl', 'servertitle', 'irc', 'webhits', 'streamhits', 'streamstatus', 'bitrate',
-            'content', 'version', 'songhistory'
+            'content', 'version', 'songhistory', 'listeners'
           )),
       '#options' => $shoutcast_stats
   );
@@ -127,21 +127,23 @@ function shoutcast_admin() {
       '#default_value' => variable_get('shoutcast_block_subject', 'Listener Stats'),
       '#size' => 25,
       '#maxlength' => 25,
-      '#description' => t('The title displayed for the SHOUTcast Stats block.'),
+      '#description' => t('The title displayed for the SHOUTcast stats block.'),
       '#required' => TRUE,
   );
 
+  // add the details_link option
   $block_options = array_merge(
           array('details_link' => t('Show \'Details...\' link under block. Don\'t forget to set
               access permissions.')),
           $shoutcast_stats
   );
-
+  // remove listeners for block options
+  unset($block_options['listeners']);
   $form['shoutcast_block_options'] = array(
       '#type' => 'checkboxes',
       '#title' => t('Block Display Options'),
       '#default_value' => variable_get('shoutcast_block_options', array('details_link',
-            'currentlisteners', 'songtitle', 'streamstatus'
+            'currentlisteners', 'songtitle'
           )),
       '#options' => $block_options
   );
@@ -158,7 +160,7 @@ function shoutcast_menu() {
   $items = array();
 
   $items['admin/settings/shoutcast'] = array(
-      'title' => 'SHOUTcast Stats',
+      'title' => 'SHOUTcast stats',
       'description' => 'Get stats from SHOUTcast server as a block',
       'page callback' => 'drupal_get_form',
       'page arguments' => array('shoutcast_admin'),
@@ -168,7 +170,7 @@ function shoutcast_menu() {
 
   // this is added for this current tutorial.
   $items['shoutcast'] = array(
-      'title' => 'SHOUTcast Stats',
+      'title' => 'SHOUTcast stats',
       'page callback' => 'shoutcast_all',
       'access arguments' => array('access shoutcast content'),
       'type' => MENU_NORMAL_ITEM,
@@ -187,14 +189,14 @@ function shoutcast_menu() {
 function shoutcast_block($op = 'list', $delta = 0) {
   // listing of blocks, such as on the admin/block page
   if ($op == 'list') {
-    $block[0]['info'] = t('SHOUTcast Stats');
+    $block[0]['info'] = t('SHOUTcast stats');
     return $block;
 
   } elseif ($op == 'view') {
-    // Get SHOUTcast XML data, either from the server or cache
+    // get SHOUTcast XML data, either from the server or cache
     $xml = shoutcast_get_xml();
     $options = variable_get('shoutcast_block_options', array('details_link',
-          'currentlisteners', 'songtitle', 'streamstatus'
+          'currentlisteners', 'songtitle'
       ));
 
     // build the block's table
@@ -209,7 +211,7 @@ function shoutcast_block($op = 'list', $delta = 0) {
     }
 
     // set up the block
-    $block['subject'] = variable_get('shoutcast_block_subject', 'SHOUTcast Stats');
+    $block['subject'] = variable_get('shoutcast_block_subject', 'SHOUTcast stats');
     $block['content'] = $block_content;
 
     return $block;
@@ -220,21 +222,29 @@ function shoutcast_block($op = 'list', $delta = 0) {
  * Generate HTML for the SHOUTcast page
  *
  * @return string  $page   Page content, an HTML table
+ *
+ * @todo Break up table into listener, server, stream, and song history tables
  */
 function shoutcast_all() {
-  // Get SHOUTcast XML data, either from the server or cache
+  // get SHOUTcast XML data, either from the server or cache
   $xml = shoutcast_get_xml();
   $options = variable_get('shoutcast_page_fields', array('currentlisteners', 'peaklisteners',
       'maxlisteners', 'reportedlisteners', 'averagetime', 'servergenre', 'serverurl',
       'servertitle', 'irc', 'webhits', 'streamhits', 'streamstatus', 'bitrate',
-      'content', 'version', 'songhistory'
+      'content', 'version', 'songhistory', 'listeners'
       ));
 
-  // Build the page's table
+  // build the statistics table
   $rows = shoutcast_table_rows($xml, $options);
   $header = array('Statistic', 'Value');
   $attributes = array('id' => 'shoutcast-node-table');
-  $page = theme('table', $header, $rows, $attributes);
+  $caption = 'Server Statistics';
+  $page = theme('table', $header, $rows, $attributes, $caption);
+
+  // append listener table
+  if ((string) $options['listeners'] == 'listeners') {
+    $page .= shoutcast_listener_table($xml->LISTENERS->LISTENER);
+  }
 
   return $page;
 }
@@ -243,6 +253,8 @@ function shoutcast_all() {
  * Get SHOUTcast server details from its XML stats page
  *
  * @return object  $xml      An XML object containing all stats
+ *
+ * @todo Fix caching and test to ensure that it's working.
  */
 function shoutcast_get_xml() {
   // if the cache has expired or it doesn't exist, get stats from the server
@@ -252,11 +264,12 @@ function shoutcast_get_xml() {
     $port = variable_get('shoutcast_port', '8000');
     $password = variable_get('shoutcast_pw', 'password');
     $username = 'admin';
-    $useragent = 'Mozilla/5.001 (Drupal SHOUTcast Stats Module)';
+    $useragent = 'Mozilla/5.001 (Drupal SHOUTcast stats module)';
     $headers = array('User-Agent' => $useragent, 'Authorization' => 'Basic ' . base64_encode($username . ':' . $password));
     $response = drupal_http_request("http://$host:$port/admin.cgi?mode=viewxml", $headers, 'GET');
     $xml = simplexml_load_string($response->data);
-    // Append the request response code to the object
+
+    // append the request response code to the object
     $xml->RESPONSECODE = $response->code;
 
     // get the caching interval (in minutes) from the module's settings
@@ -279,14 +292,12 @@ function shoutcast_get_xml() {
  * @param  object  $xml      The SHOUTcast
  * @param  array   $options  SHOUTcast module settings, includes which fields to show
  * @return array   $row      List of table rows to display
- *
- * @todo Display listeners
  */
 function shoutcast_table_rows($xml, $options) {
   $rows = array();
   $show_errors = variable_get('shoutcast_error_handling', 0);
 
-  // If the module's set to display errors and a response code other than 200 OK, show errors
+  // if the module's set to display errors and a response code other than 200 OK, show errors
   if ($show_errors && ($xml->RESPONSECODE != 200)) {
       $rows[] = array(
           array('data' => 'Error'),
@@ -425,10 +436,10 @@ function shoutcast_table_rows($xml, $options) {
       );
     }
     if ((string) $options['songhistory'] == 'songhistory') {
-      $history = shoutcast_history_toarray($xml->SONGHISTORY);
+      $history = shoutcast_songhistory_toarray($xml->SONGHISTORY);
       $rows[] = array(
           array('data' => 'Song History'),
-          array('data' => shoutcast_history_format($history))
+          array('data' => shoutcast_songhistory_format($history))
       );
     }
   }
@@ -442,13 +453,15 @@ function shoutcast_table_rows($xml, $options) {
  * @param  object $songhistory  SHOUTcast XML SONGHISTORY object
  * @return array  $list         List of songs indexed by the song's played date
  */
-function shoutcast_history_toarray($songhistory) {
+function shoutcast_songhistory_toarray($songhistory) {
   $list = array();
+
   if (count($songhistory->SONG)) {
     foreach ($songhistory->SONG as $k => $song) {
       $list[(int) $song->PLAYEDAT] = (string) $song->TITLE;
     }
   }
+
   return $list;
 }
 
@@ -458,7 +471,7 @@ function shoutcast_history_toarray($songhistory) {
  * @param  array   $history  Song list array, indexed by played date (unix timestamp)
  * @return string  $html     Song history in HTML format, each in a paragraph
  */
-function shoutcast_history_format($history) {
+function shoutcast_songhistory_format($history) {
   $html = '';
   $timezone = variable_get('date_default_timezone',
           isset($_SESSION['timezone']) ? $_SESSION['timezone'] : 0);
@@ -470,4 +483,34 @@ function shoutcast_history_format($history) {
   }
 
   return $html;
+}
+
+/**
+ * Build a table displaying listener statistics
+ *
+ * @param  array   $listeners  List of current stream listeners
+ * @return string  $table      An HTML table, one listener per row
+ *
+ * @todo Lookup listener locations http://drupal.org/project/ip2cc
+ */
+function shoutcast_listener_table($listeners) {
+  $rows = array();
+
+  foreach ($listeners as $listener) {
+    $rows[] = array(
+      array('data' => $listener->UID),
+      array('data' => $listener->HOSTNAME),
+      array('data' => $listener->USERAGENT),
+      array('data' => $listener->UNDERRUNS),
+      array('data' => floor($listener->CONNECTTIME / 60) . ' minutes'),
+      array('data' => $listener->POINTER),
+    );
+  }
+
+  $header = array('UID', 'Host/IP', 'Agent', 'Underruns', 'Time Connected', 'Pointer');
+  $attributes = array('id' => 'shoutcast-listener-table');
+  $caption = 'Current Listeners';
+  $table = theme('table', $header, $rows, $attributes, $caption);
+
+  return $table;
 }

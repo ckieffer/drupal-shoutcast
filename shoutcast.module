@@ -18,7 +18,6 @@ function shoutcast_help($path, $arg) {
       $output = '';
       break;
   }
-
   return $output;
 }
 
@@ -85,7 +84,39 @@ function shoutcast_admin() {
       '#description' => t('When SHOUTcast XML feed is unavaible or invalid.'),
   );
 
-  $shoutcast_stats = array(
+  $form['shoutcast_page_fields'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Page Display Options'),
+      '#default_value' => variable_get('shoutcast_page_fields', array('listener', 'server',
+          'stream', 'songhistory', 'listener_detail')),
+      '#options' => array(
+          'listener' => t('Listener summary'),
+          'server' => t('Server summary'),
+          'stream' => t('Stream summary'),
+          'songhistory' => t('Song history'),
+          'listener_detail' => t('Listener detail'),
+      )
+  );
+
+  $form['shoutcast_block_subject'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Block Title'),
+      '#default_value' => variable_get('shoutcast_block_subject', 'Listener Stats'),
+      '#size' => 25,
+      '#maxlength' => 25,
+      '#description' => t('The title displayed for the SHOUTcast stats block.'),
+      '#required' => TRUE,
+  );
+
+  // add the details_link option
+  $form['shoutcast_block_options'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Block Display Options'),
+      '#default_value' => variable_get('shoutcast_block_options', array('details_link',
+            'currentlisteners', 'songtitle'
+          )),
+      '#options' => array(
+          'details_link' => t('Show \'Details...\' link under block. Don\'t forget to set access permissions.'),
           'currentlisteners' => t('Current listeners'),
           'peaklisteners' => t('Peak listeners'),
           'maxlisteners' => t('Max listeners allowed'),
@@ -108,46 +139,8 @@ function shoutcast_admin() {
           //'webdata' => t('Web data'), // object
           'songhistory' => t('Song history'),
           'listeners' => t('Listeners'),
-      );
-
-  $form['shoutcast_page_fields'] = array(
-      '#type' => 'checkboxes',
-      '#title' => t('Page Display Options'),
-      '#default_value' => variable_get('shoutcast_page_fields', array('currentlisteners',
-            'peaklisteners', 'maxlisteners', 'reportedlisteners', 'averagetime', 'servergenre',
-            'serverurl', 'servertitle', 'irc', 'webhits', 'streamhits', 'streamstatus', 'bitrate',
-            'content', 'version', 'songhistory', 'listeners'
-          )),
-      '#options' => $shoutcast_stats
+      )
   );
-
-  $form['shoutcast_block_subject'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Block Title'),
-      '#default_value' => variable_get('shoutcast_block_subject', 'Listener Stats'),
-      '#size' => 25,
-      '#maxlength' => 25,
-      '#description' => t('The title displayed for the SHOUTcast stats block.'),
-      '#required' => TRUE,
-  );
-
-  // add the details_link option
-  $block_options = array_merge(
-          array('details_link' => t('Show \'Details...\' link under block. Don\'t forget to set
-              access permissions.')),
-          $shoutcast_stats
-  );
-  // remove listeners for block options
-  unset($block_options['listeners']);
-  $form['shoutcast_block_options'] = array(
-      '#type' => 'checkboxes',
-      '#title' => t('Block Display Options'),
-      '#default_value' => variable_get('shoutcast_block_options', array('details_link',
-            'currentlisteners', 'songtitle'
-          )),
-      '#options' => $block_options
-  );
-
   return system_settings_form($form);
 }
 
@@ -185,6 +178,9 @@ function shoutcast_menu() {
  * @param  string  $op     Current operation from the URL
  * @param  int     $delta  Offset for this block
  * @return string  $block  Block content, an HTML table
+ *
+ * @todo Provide a song history block
+ * @todo Review block fields, we don't really need to display all of these. Simplify.
  */
 function shoutcast_block($op = 'list', $delta = 0) {
   // listing of blocks, such as on the admin/block page
@@ -201,7 +197,105 @@ function shoutcast_block($op = 'list', $delta = 0) {
 
     // build the block's table
     $header = array('Statistic', 'Value');
-    $rows = shoutcast_table_rows($xml, $options);
+    $rows = array();
+    if ((string) $options['currentlisteners'] == 'currentlisteners') {
+      $rows[] = array(
+        array('data' => 'Current Listeners'),
+        array('data' => $xml->CURRENTLISTENERS)
+      );
+    }
+    if ((string) $options['peaklisteners'] == 'peaklisteners') {
+      $rows[] = array(
+        array('data' => 'Most Listeners'),
+        array('data' => $xml->PEAKLISTENERS)
+      );
+    }
+    if ((string) $options['maxlisteners'] == 'maxlisteners') {
+      $rows[] = array(
+        array('data' => 'Listener Limit'),
+        array('data' => $xml->MAXLISTENERS)
+      );
+    }
+    if ((string) $options['reportedlisteners'] == 'reportedlisteners') {
+      $rows[] = array(
+        array('data' => 'Reported Listeners'),
+        array('data' => $xml->REPORTEDLISTENERS)
+      );
+    }
+    if ((string) $options['averagetime'] == 'averagetime') {
+      $avg = floor($xml->AVERAGETIME / 60);
+      $rows[] = array(
+        array('data' => 'Average Listen Time'),
+        array('data' => $avg . ' minutes')
+      );
+    }
+    if ((string) $options['servergenre'] == 'servergenre') {
+      $rows[] = array(
+        array('data' => 'Server Genre'),
+        array('data' => $xml->SERVERGENRE)
+      );
+    }
+    if ((string) $options['serverurl'] == 'serverurl') {
+      $rows[] = array(
+        array('data' => 'Server URL'),
+        array('data' => '<a href="' . $xml->SERVERURL . '">' . $xml->SERVERURL . '</a>')
+      );
+    }
+    if ((string) $options['servertitle'] == 'servertitle') {
+      $rows[] = array(
+        array('data' => 'Server Title'),
+        array('data' => $xml->SERVERTITLE)
+      );
+    }
+    if ((string) $options['songtitle'] == 'songtitle') {
+      $rows[] = array(
+        array('data' => 'Current Song'),
+        array('data' => $xml->SONGTITLE)
+      );
+    }
+    if ((string) $options['irc'] == 'irc') {
+      $rows[] = array(
+        array('data' => 'IRC'),
+        array('data' => $xml->IRC)
+      );
+    }
+    if ((string) $options['webhits'] == 'webhits') {
+      $rows[] = array(
+        array('data' => 'Web Hits'),
+        array('data' => $xml->WEBHITS)
+      );
+    }
+    if ((string) $options['streamhits'] == 'streamhits') {
+      $rows[] = array(
+        array('data' => 'Stream Hits'),
+        array('data' => $xml->STREAMHITS)
+      );
+    }
+    if ((string) $options['streamstatus'] == 'streamstatus') {
+      ($xml->STREAMSTATUS == '1') ? $sc_srv_status = 'Up' : $sc_srv_status = 'Down';
+      $rows[] = array(
+        array('data' => 'Stream Status'),
+        array('data' => $sc_srv_status)
+      );
+    }
+    if ((string) $options['bitrate'] == 'bitrate') {
+      $rows[] = array(
+        array('data' => 'Stream Bitrate'),
+        array('data' => $xml->BITRATE . ' kbps')
+      );
+    }
+    if ((string) $options['content'] == 'content') {
+      $rows[] = array(
+        array('data' => 'Content Type'),
+        array('data' => $xml->CONTENT)
+      );
+    }
+    if ((string) $options['version'] == 'version') {
+      $rows[] = array(
+        array('data' => 'Version'),
+        array('data' => $xml->VERSION)
+      );
+    }
     $attributes = array('id' => 'shoutcast-block-table');
     $block_content = theme('table', $header, $rows, $attributes);
 
@@ -223,27 +317,90 @@ function shoutcast_block($op = 'list', $delta = 0) {
  *
  * @return string  $page   Page content, an HTML table
  *
- * @todo Break up table into listener, server, stream, and song history tables
+ * @todo Apply t() to all strings throughout the module
  */
 function shoutcast_all() {
+  $page = '';
+
   // get SHOUTcast XML data, either from the server or cache
   $xml = shoutcast_get_xml();
-  $options = variable_get('shoutcast_page_fields', array('currentlisteners', 'peaklisteners',
-      'maxlisteners', 'reportedlisteners', 'averagetime', 'servergenre', 'serverurl',
-      'servertitle', 'irc', 'webhits', 'streamhits', 'streamstatus', 'bitrate',
-      'content', 'version', 'songhistory', 'listeners'
+  $options = variable_get('shoutcast_page_fields', array('listener', 'server',
+      'stream', 'songhistory', 'listener_detail'
       ));
 
-  // build the statistics table
-  $rows = shoutcast_table_rows($xml, $options);
-  $header = array('Statistic', 'Value');
-  $attributes = array('id' => 'shoutcast-node-table');
-  $caption = 'Server Statistics';
-  $page = theme('table', $header, $rows, $attributes, $caption);
+  // throw an error is server doesn't respond
+  if ($xml->RESPONSECODE != 200) {
+    shoutcast_error($xml->RESPONSECODE);
+  }
 
-  // append listener table
-  if ((string) $options['listeners'] == 'listeners') {
-    $page .= shoutcast_listener_table($xml->LISTENERS->LISTENER);
+  // listener summary table
+  if ((string) $options['listener'] == 'listener') {
+    $head_listener = array('Current Listeners', 'Peak Listeners', 'Listener Limit', 'Reported Listeners', 'Avg Listen Time');
+    $row_listener[] = array(
+      array('data' => $xml->CURRENTLISTENERS),
+      array('data' => $xml->PEAKLISTENERS),
+      array('data' => $xml->MAXLISTENERS),
+      array('data' => $xml->REPORTEDLISTENERS),
+      array('data' => floor($xml->AVERAGETIME / 60) . ' min.'),
+    );
+    $attr_listener = array('id' => 'shoutcast-listener-table');
+    $capt_listener = 'Listener Summary';
+    $page .= theme('table', $head_listener, $row_listener, $attr_listener, $capt_listener);
+  }
+
+  // server summary table (not showing song title, it shows in song history)
+  if ((string) $options['server'] == 'server') {
+    $head_server = array('Genre', 'URL', 'Title', 'IRC', 'Web Hits');
+    $row_server[] = array(
+      array('data' => $xml->SERVERGENRE),
+      array('data' => '<a href="' . $xml->SERVERURL . '">' . $xml->SERVERURL . '</a>'),
+      array('data' => $xml->SERVERTITLE),
+      array('data' => $xml->IRC),
+      array('data' => $xml->WEBHITS),
+    );
+    $attr_server = array('id' => 'shoutcast-server-table');
+    $capt_server = 'Server Summary';
+    $page .= theme('table', $head_server, $row_server, $attr_server, $capt_server);
+  }
+
+  // stream summary table
+  if ((string) $options['stream'] == 'stream') {
+    $head_stream = array('Hits', 'Status', 'Rate', 'Type', 'Version');
+    $row_stream[] = array(
+      array('data' => $xml->STREAMHITS),
+      array('data' => ($xml->STREAMSTATUS == '1') ? $sc_srv_status = 'Up' : $sc_srv_status = 'Down'),
+      array('data' => $xml->BITRATE . ' kbps'),
+      array('data' => $xml->CONTENT),
+      array('data' => $xml->VERSION),
+    );
+    $attr_stream = array('id' => 'shoutcast-stream-table');
+    $capt_stream = 'Stream Summary';
+    $page .= theme('table', $head_stream, $row_stream, $attr_stream, $capt_stream);
+  }
+
+  // song history table
+  if ((string) $options['songhistory'] == 'songhistory') {
+    $page .= shoutcast_songhistory_table($xml->SONGHISTORY);
+  }
+
+  // listener detail table
+  // @todo Lookup listener locations http://drupal.org/project/ip2cc
+  if ((string) $options['listener_detail'] == 'listener_detail') {
+    $rows_listeners = array();
+    $head_listeners = array('UID', 'Host/IP', 'Agent', 'Underruns', 'Time Connected', 'Pointer');
+    foreach ($xml->LISTENERS->LISTENER as $listener) {
+      $rows_listeners[] = array(
+        array('data' => $listener->UID),
+        array('data' => $listener->HOSTNAME),
+        array('data' => $listener->USERAGENT),
+        array('data' => $listener->UNDERRUNS),
+        array('data' => floor($listener->CONNECTTIME / 60) . ' min.'),
+        array('data' => $listener->POINTER),
+      );
+    }
+    $attrib_listeners = array('id' => 'shoutcast-listener-detail-table');
+    $capt_listeners = 'Current Listeners';
+    $page .= theme('table', $head_listeners, $rows_listeners, $attrib_listeners, $capt_listeners);
   }
 
   return $page;
@@ -287,230 +444,64 @@ function shoutcast_get_xml() {
 }
 
 /**
- * Build a set of table rows for the stats table block and page
+ * Associate an HTTP error message with its code for display
  *
- * @param  object  $xml      The SHOUTcast
- * @param  array   $options  SHOUTcast module settings, includes which fields to show
- * @return array   $row      List of table rows to display
+ * @param  int    $code  HTTP server response code
+ * @return void          Call drupal_set_message
  */
-function shoutcast_table_rows($xml, $options) {
-  $rows = array();
-  $show_errors = variable_get('shoutcast_error_handling', 0);
-
-  // if the module's set to display errors and a response code other than 200 OK, show errors
-  if ($show_errors && ($xml->RESPONSECODE != 200)) {
-      $rows[] = array(
-          array('data' => 'Error'),
-          array('data' => 'SHOUTcast module has not been configured or the server is not responding')
-      );
-      // SHOUTcast server response codes (HTTP), 200 OK
-      switch ($xml->RESPONSECODE) {
-        case 203:
-          $response_code = '203 Partial Information';
-          break;
-        case 204:
-          $response_code = '204 No Response';
-          break;
-        case 401:
-          $response_code = '401 Unauthorized';
-          break;
-        case 403:
-          $response_code = '403 Forbidden';
-          break;
-        case 404:
-          $response_code = '404 Not found';
-          break;
-        case 500:
-          $response_code = '500 Internal Error';
-          break;
-        case 503:
-          $response_code = '503 Gateway timout';
-          break;
-        default:
-          $response_code = $xml->RESPONSECODE . ' Unknown error';
-          break;
-      }
-      $rows[] = array(
-          array('data' => 'Response'),
-          array('data' => $response_code)
-      );
-
-  } else {
-
-    if ((string) $options['currentlisteners'] == 'currentlisteners') {
-      $rows[] = array(
-          array('data' => 'Current Listeners'),
-          array('data' => $xml->CURRENTLISTENERS)
-      );
-    }
-    if ((string) $options['peaklisteners'] == 'peaklisteners') {
-      $rows[] = array(
-          array('data' => 'Most Listeners'),
-          array('data' => $xml->PEAKLISTENERS)
-      );
-    }
-    if ((string) $options['maxlisteners'] == 'maxlisteners') {
-      $rows[] = array(
-          array('data' => 'Listener Limit'),
-          array('data' => $xml->MAXLISTENERS)
-      );
-    }
-    if ((string) $options['reportedlisteners'] == 'reportedlisteners') {
-      $rows[] = array(
-          array('data' => 'Reported Listeners'),
-          array('data' => $xml->REPORTEDLISTENERS)
-      );
-    }
-    if ((string) $options['averagetime'] == 'averagetime') {
-      $avg = floor($xml->AVERAGETIME / 60);
-      $rows[] = array(
-          array('data' => 'Average Listen Time'),
-          array('data' => $avg . ' minutes')
-      );
-    }
-    if ((string) $options['servergenre'] == 'servergenre') {
-      $rows[] = array(
-          array('data' => 'Server Genre'),
-          array('data' => $xml->SERVERGENRE)
-      );
-    }
-    if ((string) $options['serverurl'] == 'serverurl') {
-      $rows[] = array(
-          array('data' => 'Server URL'),
-          array('data' => '<a href="' . $xml->SERVERURL . '">' . $xml->SERVERURL . '</a>')
-      );
-    }
-    if ((string) $options['servertitle'] == 'servertitle') {
-      $rows[] = array(
-          array('data' => 'Server Title'),
-          array('data' => $xml->SERVERTITLE)
-      );
-    }
-    if ((string) $options['songtitle'] == 'songtitle') {
-      $rows[] = array(
-          array('data' => 'Current Song'),
-          array('data' => $xml->SONGTITLE)
-      );
-    }
-    if ((string) $options['irc'] == 'irc') {
-      $rows[] = array(
-          array('data' => 'IRC'),
-          array('data' => $xml->IRC)
-      );
-    }
-    if ((string) $options['webhits'] == 'webhits') {
-      $rows[] = array(
-          array('data' => 'Web Hits'),
-          array('data' => $xml->WEBHITS)
-      );
-    }
-    if ((string) $options['streamhits'] == 'streamhits') {
-      $rows[] = array(
-          array('data' => 'Stream Hits'),
-          array('data' => $xml->STREAMHITS)
-      );
-    }
-    if ((string) $options['streamstatus'] == 'streamstatus') {
-      ($xml->STREAMSTATUS == '1') ? $sc_srv_status = 'Up' : $sc_srv_status = 'Down';
-      $rows[] = array(
-          array('data' => 'Stream Status'),
-          array('data' => $sc_srv_status)
-      );
-    }
-    if ((string) $options['bitrate'] == 'bitrate') {
-      $rows[] = array(
-          array('data' => 'Stream Bitrate'),
-          array('data' => $xml->BITRATE . ' kbps')
-      );
-    }
-    if ((string) $options['content'] == 'content') {
-      $rows[] = array(
-          array('data' => 'Content Type'),
-          array('data' => $xml->CONTENT)
-      );
-    }
-    if ((string) $options['version'] == 'version') {
-      $rows[] = array(
-          array('data' => 'Version'),
-          array('data' => $xml->VERSION)
-      );
-    }
-    if ((string) $options['songhistory'] == 'songhistory') {
-      $history = shoutcast_songhistory_toarray($xml->SONGHISTORY);
-      $rows[] = array(
-          array('data' => 'Song History'),
-          array('data' => shoutcast_songhistory_format($history))
-      );
-    }
+function shoutcast_error($code) {
+  // SHOUTcast server response codes (HTTP), 200 OK
+  switch ((int) $code) {
+    case 203:
+      $msg = 'Partial Information';
+      break;
+    case 204:
+      $msg = 'No Response';
+      break;
+    case 401:
+      $msg = 'Unauthorized';
+      break;
+    case 403:
+      $msg = 'Forbidden';
+      break;
+    case 404:
+      $msg = 'Not found';
+      break;
+    case 500:
+      $msg = 'Internal Error';
+      break;
+    case 503:
+      $msg = 'Gateway timout';
+      break;
+    default:
+      $msg = 'Unknown error';
+      break;
   }
-
-  return $rows;
-}
-
-/**
- * Convert SHOUTcast XML song history object to an array, using played date as the key
- *
- * @param  object $songhistory  SHOUTcast XML SONGHISTORY object
- * @return array  $list         List of songs indexed by the song's played date
- */
-function shoutcast_songhistory_toarray($songhistory) {
-  $list = array();
-
-  if (count($songhistory->SONG)) {
-    foreach ($songhistory->SONG as $k => $song) {
-      $list[(int) $song->PLAYEDAT] = (string) $song->TITLE;
-    }
-  }
-
-  return $list;
+  $message  = t('The SHOUTcast module has not been configured properly or the server is not responding.');
+  $message .= t(" ($code: $msg)");
+  drupal_set_message($message, 'error', true);
 }
 
 /**
  * Simple format of song history array as HTML
  *
  * @param  array   $history  Song list array, indexed by played date (unix timestamp)
- * @return string  $html     Song history in HTML format, each in a paragraph
+ * @return string  $table     Song history in HTML format, each in a paragraph
  */
-function shoutcast_songhistory_format($history) {
-  $html = '';
+function shoutcast_songhistory_table($history) {
+  $rows_history = array();
+  $head_history = array('Played', 'Track Info');
   $timezone = variable_get('date_default_timezone',
           isset($_SESSION['timezone']) ? $_SESSION['timezone'] : 0);
-  if (count($history)) {
-    foreach ($history as $timestamp => $song) {
-      $date = format_date($timestamp, 'medium', '', $timezone);
-      $html .= "<p>$date - $song</p>";
-    }
-  }
-
-  return $html;
-}
-
-/**
- * Build a table displaying listener statistics
- *
- * @param  array   $listeners  List of current stream listeners
- * @return string  $table      An HTML table, one listener per row
- *
- * @todo Lookup listener locations http://drupal.org/project/ip2cc
- */
-function shoutcast_listener_table($listeners) {
-  $rows = array();
-
-  foreach ($listeners as $listener) {
-    $rows[] = array(
-      array('data' => $listener->UID),
-      array('data' => $listener->HOSTNAME),
-      array('data' => $listener->USERAGENT),
-      array('data' => $listener->UNDERRUNS),
-      array('data' => floor($listener->CONNECTTIME / 60) . ' minutes'),
-      array('data' => $listener->POINTER),
+  foreach ($history->SONG as $k => $track) {
+    $rows_history[] = array(
+      array('data' => format_date($track->PLAYEDAT, 'medium', '', $timezone)),
+      array('data' => $track->TITLE),
     );
   }
-
-  $header = array('UID', 'Host/IP', 'Agent', 'Underruns', 'Time Connected', 'Pointer');
-  $attributes = array('id' => 'shoutcast-listener-table');
-  $caption = 'Current Listeners';
-  $table = theme('table', $header, $rows, $attributes, $caption);
+  $attrib_history = array('id' => 'shoutcast-songhistory-table');
+  $capt_history = 'Song History';
+  $table = theme('table', $head_history, $rows_history, $attrib_history, $capt_history);
 
   return $table;
 }

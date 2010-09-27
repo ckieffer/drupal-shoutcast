@@ -34,8 +34,6 @@ function shoutcast_perm() {
  * Generate the SHOUTcast admin settings form
  *
  * @return array   Module admin form
- *
- * @todo Add date format to display with song history in block and page
  */
 function shoutcast_admin() {
   $form['shoutcast_ip'] = array(
@@ -150,8 +148,6 @@ function shoutcast_admin() {
  * @return array   Menu items array
  */
 function shoutcast_menu() {
-  $items = array();
-
   $items['admin/settings/shoutcast'] = array(
       'title' => 'SHOUTcast stats',
       'description' => 'Get stats from SHOUTcast server as a block',
@@ -164,11 +160,10 @@ function shoutcast_menu() {
   // this is added for this current tutorial.
   $items['shoutcast'] = array(
       'title' => 'SHOUTcast stats',
-      'page callback' => 'shoutcast_all',
+      'page callback' => 'shoutcast_page',
       'access arguments' => array('access shoutcast content'),
       'type' => MENU_NORMAL_ITEM,
   );
-
   return $items;
 }
 
@@ -319,7 +314,7 @@ function shoutcast_block($op = 'list', $delta = 0) {
  *
  * @todo Apply t() to all strings throughout the module
  */
-function shoutcast_all() {
+function shoutcast_page() {
   $page = '';
 
   // get SHOUTcast XML data, either from the server or cache
@@ -327,11 +322,6 @@ function shoutcast_all() {
   $options = variable_get('shoutcast_page_fields', array('listener', 'server',
       'stream', 'songhistory', 'listener_detail'
       ));
-
-  // throw an error is server doesn't respond
-  if ($xml->RESPONSECODE != 200) {
-    shoutcast_error($xml->RESPONSECODE);
-  }
 
   // listener summary table
   if ((string) $options['listener'] == 'listener') {
@@ -402,7 +392,6 @@ function shoutcast_all() {
     $capt_listeners = 'Current Listeners';
     $page .= theme('table', $head_listeners, $rows_listeners, $attrib_listeners, $capt_listeners);
   }
-
   return $page;
 }
 
@@ -410,36 +399,41 @@ function shoutcast_all() {
  * Get SHOUTcast server details from its XML stats page
  *
  * @return object  $xml      An XML object containing all stats
- *
- * @todo Fix caching and test to ensure that it's working.
  */
 function shoutcast_get_xml() {
+  // get shoutcast cache
+  $xml_cache = cache_get('shoutcast');
+
+  // load the cached data first, we'll overwrite if it's expired
+  $xml = simplexml_load_string($xml_cache->data);
+
   // if the cache has expired or it doesn't exist, get stats from the server
-  if ($xml_cache->expire < time() || !$xml_cache = cache_get('shoutcast')) {
-    error_reporting(E_ALL ^ E_NOTICE);
+  if ($xml_cache->expire < time() || !$xml_cache) {
     $host = variable_get('shoutcast_ip', '127.0.0.1');
     $port = variable_get('shoutcast_port', '8000');
     $password = variable_get('shoutcast_pw', 'password');
     $username = 'admin';
     $useragent = 'Mozilla/5.001 (Drupal SHOUTcast stats module)';
-    $headers = array('User-Agent' => $useragent, 'Authorization' => 'Basic ' . base64_encode($username . ':' . $password));
+    $headers = array('User-Agent' => $useragent, 'Authorization' => 'Basic ' .
+        base64_encode($username . ':' . $password));
     $response = drupal_http_request("http://$host:$port/admin.cgi?mode=viewxml", $headers, 'GET');
-    $xml = simplexml_load_string($response->data);
 
-    // append the request response code to the object
-    $xml->RESPONSECODE = $response->code;
+    // the shoutcast server returned data, cache it
+    if ($response->code == 200) {
+      // convert response string to object so that the request response code may be appended to it
+      $xml = simplexml_load_string($response->data);
 
-    // get the caching interval (in minutes) from the module's settings
-    $interval = variable_get('shoutcast_cachetime', 1);
+      // get the caching interval (in minutes) from the module's settings
+      $interval = variable_get('shoutcast_cachetime', 1);
 
-    // update the cache
-    cache_set('shoutcast', $xml_data, 'cache', time() + ($interval * 60));
-
-  } else {
-    // get cached data
-    $xml = simplexml_load_string($xml_cache->data);
+      // update the cache
+      cache_set('shoutcast', $response->data, 'cache', time() + ($interval * 60));
+    
+    // throw an error is server didn't respond 200 OK
+    } else {
+      shoutcast_error($response->code);
+    }
   }
-
   return $xml;
 }
 
@@ -477,7 +471,7 @@ function shoutcast_error($code) {
       $msg = 'Unknown error';
       break;
   }
-  $message  = t('The SHOUTcast module has not been configured properly or the server is not responding.');
+  $message  = t('The SHOUTcast module may not be configured properly or the server is not responding.');
   $message .= t(" ($code: $msg)");
   drupal_set_message($message, 'error', true);
 }
